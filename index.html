@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Open Library Book Search Test</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen p-6">
+
+  <div class="max-w-3xl mx-auto">
+    <h1 class="text-2xl font-bold mb-1">Book Search Test (Open Library API)</h1>
+    <p class="text-sm text-slate-500 mb-6">Search by title, author, or ISBN to verify API response and cover loading.</p>
+
+    <!-- Search Form -->
+    <form id="searchForm" class="flex gap-2 mb-6">
+      <input
+        type="text"
+        id="searchInput"
+        placeholder="e.g., Clean Code, Data Structures, 9780132350884..."
+        required
+        class="flex-1 px-4 py-2.5 rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+      />
+      <button
+        type="submit"
+        id="searchBtn"
+        class="px-5 py-2.5 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition disabled:opacity-50"
+      >
+        Search
+      </button>
+    </form>
+
+    <!-- Status / Error Message -->
+    <div id="status" class="text-sm text-slate-600 mb-4 hidden"></div>
+
+    <!-- Results Grid -->
+    <div id="results" class="grid grid-cols-1 sm:grid-cols-2 gap-4"></div>
+  </div>
+
+  <script>
+    const searchForm = document.getElementById("searchForm");
+    const searchInput = document.getElementById("searchInput");
+    const searchBtn = document.getElementById("searchBtn");
+    const statusEl = document.getElementById("status");
+    const resultsEl = document.getElementById("results");
+
+    searchForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const query = searchInput.value.trim();
+      if (!query) return;
+
+      // UI loading state
+      searchBtn.disabled = true;
+      searchBtn.textContent = "Searching...";
+      statusEl.textContent = `Searching Open Library for "${query}"...`;
+      statusEl.classList.remove("hidden", "text-red-600");
+      resultsEl.innerHTML = "";
+
+      try {
+        const fields = "key,title,author_name,first_publish_year,cover_i,isbn";
+        const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&fields=${fields}&limit=10`;
+
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`API error: ${response.status}`);
+
+        const data = await response.json();
+
+        if (!data.docs || data.docs.length === 0) {
+          statusEl.textContent = "No books found. Try another title or ISBN.";
+          return;
+        }
+
+        statusEl.textContent = `Found ${data.numFound.toLocaleString()} matches (showing top ${data.docs.length}):`;
+        renderBooks(data.docs);
+      } catch (err) {
+        statusEl.textContent = `Error: ${err.message}`;
+        statusEl.classList.add("text-red-600");
+      } finally {
+        searchBtn.disabled = false;
+        searchBtn.textContent = "Search";
+      }
+    });
+
+    function renderBooks(books) {
+      resultsEl.innerHTML = books.map((book) => {
+        const title = escapeHtml(book.title || "Untitled");
+        const authors = escapeHtml((book.author_name || ["Unknown Author"]).join(", "));
+        const year = book.first_publish_year || "N/A";
+        const isbn = book.isbn ? book.isbn[0] : "N/A";
+        const coverUrl = book.cover_i
+          ? `https://covers.openlibrary.org/b/id/${book.cover_i}-M.jpg`
+          : "https://placehold.co/90x130/e2e8f0/64748b?text=No+Cover";
+
+        return `
+          <div class="flex gap-4 p-4 bg-white rounded-xl border border-slate-200 shadow-sm">
+            <img
+              src="${coverUrl}"
+              alt="${title}"
+              class="w-20 h-28 object-cover rounded-md bg-slate-100 shrink-0"
+              loading="lazy"
+            />
+            <div class="flex flex-col justify-between min-w-0">
+              <div>
+                <h2 class="font-semibold text-slate-900 line-clamp-2" title="${title}">${title}</h2>
+                <p class="text-sm text-slate-600 truncate mt-0.5">${authors}</p>
+              </div>
+              <div class="text-xs text-slate-400 mt-2 space-y-0.5">
+                <p>Published: ${year}</p>
+                <p>ISBN: ${escapeHtml(isbn)}</p>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    // Basic XSS sanitization for API text
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+  </script>
+</body>
+</html>
